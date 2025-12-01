@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking 3D - Draw & Create</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        #video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #webcam.mirrored {
+            transform: scaleX(-1);
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+            pointer-events: none;
+        }
+        #hand-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 3;
+            pointer-events: none;
+        }
+        #draw-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 4;
+            pointer-events: none;
+        }
+        .ui-overlay {
+            position: fixed;
+            z-index: 10;
+            color: white;
+        }
+        .start-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 30px;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+        }
+        .start-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+        }
+        .info-panel {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(15px);
+            padding: 15px 20px;
+            border-radius: 15px;
+            font-size: 14px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .hand-indicator {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,215,0,0.9) 0%, rgba(255,165,0,0.5) 100%);
+            border: 3px solid #ffd700;
+            box-shadow: 0 0 20px #ffd700, 0 0 40px rgba(255,215,0,0.5);
+            position: fixed;
+            pointer-events: none;
+            z-index: 100;
+            transform: translate(-50%, -50%);
+            display: none;
+            transition: all 0.05s ease;
+        }
+        .hand-indicator.drawing {
+            background: radial-gradient(circle, rgba(0,255,136,0.9) 0%, rgba(0,204,106,0.5) 100%);
+            border: 3px solid #00ff88;
+            box-shadow: 0 0 30px #00ff88, 0 0 60px rgba(0,255,136,0.5);
+            width: 20px;
+            height: 20px;
+        }
+        .hand-indicator.grabbing {
+            background: radial-gradient(circle, rgba(255,107,107,0.9) 0%, rgba(238,90,90,0.5) 100%);
+            border: 3px solid #ff6b6b;
+            box-shadow: 0 0 30px #ff6b6b, 0 0 60px rgba(255,107,107,0.5);
+            transform: translate(-50%, -50%) scale(0.7);
+        }
+        .hand-indicator.near-object {
+            background: radial-gradient(circle, rgba(100,200,255,0.8) 0%, rgba(50,150,255,0.4) 100%);
+            border: 3px solid #64c8ff;
+            box-shadow: 0 0 25px #64c8ff;
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+        .toggle-btn {
+            transition: all 0.3s ease;
+        }
+        .toggle-btn.active {
+            box-shadow: 0 0 15px currentColor;
+        }
+        .color-btn {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .color-btn:hover, .color-btn.selected {
+            transform: scale(1.2);
+            border-color: white;
+        }
+        .mode-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 200;
+            opacity: 0;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 30px currentColor;
+        }
+        .mode-indicator.show {
+            opacity: 1;
+            animation: mode-pulse 0.5s ease-out;
+        }
+        @keyframes mode-pulse {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        .particle {
+            position: fixed;
+            pointer-events: none;
+            z-index: 150;
+            border-radius: 50%;
+            animation: particle-fade 1s ease-out forwards;
+        }
+        @keyframes particle-fade {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0); }
+        }
+        .drawing-preview {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            background: rgba(0,0,0,0.8);
+            border-radius: 15px;
+            border: 2px solid rgba(255,255,255,0.3);
+            z-index: 20;
+            display: none;
+        }
+        .depth-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #4ecdc4, #ff6b6b);
+            outline: none;
+        }
+        .depth-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .gesture-guide {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: flex;
+            gap: 20px;
+            z-index: 15;
+            font-size: 12px;
+        }
+        .gesture-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .gesture-icon {
+            font-size: 24px;
+        }
+        .trail-point {
+            position: fixed;
+            pointer-events: none;
+            z-index: 99;
+            border-radius: 50%;
+            animation: trail-fade 0.5s ease-out forwards;
+        }
+        @keyframes trail-fade {
+            0% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <!-- Start Screen -->
+    <div id="start-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+        <h1 class="text-5xl font-bold text-white mb-4 text-center">🖐️ Hand Tracking 3D</h1>
+        <p class="text-xl text-purple-300 mb-2">Draw & Create</p>
+        <p class="text-gray-400 mb-8 text-center max-w-md px-4">
+            Gambar dengan jari telunjuk Anda dan ubah menjadi objek 3D yang hidup!
+        </p>
+        
+        <button id="start-btn" class="start-btn mb-8">
+            🚀 Mulai Bermain
+        </button>
+        
+        <div class="text-gray-400 text-sm text-center px-4 max-w-lg">
+            <div class="grid grid-cols-2 gap-4 text-left">
+                <div class="bg-white/10 p-3 rounded-lg">
+                    <p class="font-semibold text-green-400 mb-1">☝️ Menunjuk = Gambar</p>
+                    <p class="text-xs">Angkat jari telunjuk saja</p>
+                    <p class="text-xs">Garis mengikuti ujung jari</p>
+                </div>
+                <div class="bg-white/10 p-3 rounded-lg">
+                    <p class="font-semibold text-blue-400 mb-1">✋ Buka Tangan = Stop</p>
+                    <p class="text-xs">Buka semua jari untuk</p>
+                    <p class="text-xs">berhenti & buat objek 3D</p>
+                </div>
+                <div class="bg-white/10 p-3 rounded-lg">
+                    <p class="font-semibold text-red-400 mb-1">🤏 Cubit = Ambil</p>
+                    <p class="text-xs">Dekatkan jempol & telunjuk</p>
+                    <p class="text-xs">untuk mengambil objek</p>
+                </div>
+                <div class="bg-white/10 p-3 rounded-lg">
+                    <p class="font-semibold text-yellow-400 mb-1">✊ Kepal = Lempar</p>
+                    <p class="text-xs">Lepas cubitan untuk</p>
+                    <p class="text-xs">melempar objek</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mode Indicator -->
+    <div id="mode-indicator" class="mode-indicator text-green-400">✏️ Menggambar...</div>
+
+    <!-- Video Background -->
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+    </div>
+
+    <!-- Three.js Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Hand Detection Canvas -->
+    <canvas id="hand-canvas"></canvas>
+    
+    <!-- Drawing Canvas -->
+    <canvas id="draw-canvas"></canvas>
+
+    <!-- Hand Indicators -->
+    <div id="hand-left" class="hand-indicator"></div>
+    <div id="hand-right" class="hand-indicator"></div>
+
+    <!-- Drawing Preview -->
+    <canvas id="drawing-preview" class="drawing-preview"></canvas>
+
+    <!-- Info Panel -->
+    <div class="ui-overlay top-4 left-4 info-panel" id="info-panel" style="display: none;">
+        <div class="flex items-center gap-2 mb-2">
+            <div id="status-dot" class="w-3 h-3 rounded-full bg-yellow-400"></div>
+            <span id="status-text">Mendeteksi tangan...</span>
+        </div>
+        <div id="hand-count" class="text-gray-300">Tangan: 0</div>
+        <div id="object-count" class="text-gray-300">Objek: 0</div>
+        <div id="mode-status" class="text-green-400 mt-1 font-semibold">Mode: Normal</div>
+        <div id="draw-points" class="text-cyan-300 text-xs mt-1">Points: 0</div>
+    </div>
+
+    <!-- Right Panel - Drawing Tools -->
+    <div class="ui-overlay top-4 right-4 info-panel" id="draw-panel" style="display: none;">
+        <div class="text-sm font-semibold mb-3">🎨 Alat Gambar</div>
+        
+        <div class="mb-3">
+            <div class="text-xs text-gray-400 mb-1">Warna</div>
+            <div class="flex gap-2 flex-wrap">
+                <button class="color-btn selected" style="background: #ff6b6b;" data-color="#ff6b6b"></button>
+                <button class="color-btn" style="background: #4ecdc4;" data-color="#4ecdc4"></button>
+                <button class="color-btn" style="background: #ffe66d;" data-color="#ffe66d"></button>
+                <button class="color-btn" style="background: #95e1d3;" data-color="#95e1d3"></button>
+                <button class="color-btn" style="background: #aa96da;" data-color="#aa96da"></button>
+                <button class="color-btn" style="background: #ff9a9e;" data-color="#ff9a9e"></button>
+            </div>
+        </div>
+        
+        <div class="mb-3">
+            <div class="text-xs text-gray-400 mb-1">Ketebalan 3D</div>
+            <input type="range" id="depth-slider" class="depth-slider" min="0.2" max="1.5" step="0.1" value="0.5">
+            <div class="text-xs text-center text-white mt-1" id="depth-value">0.5</div>
+        </div>
+        
+        <div class="mb-3">
+            <div class="text-xs text-gray-400 mb-1">Mode Physics</div>
+            <button id="toggle-physics" class="toggle-btn w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded-lg text-xs font-semibold transition active">
+                🌍 Gravitasi: ON
+            </button>
+        </div>
+        
+        <button id="toggle-collision" class="toggle-btn w-full bg-orange-600 hover:bg-orange-700 px-3 py-2 rounded-lg text-xs font-semibold transition mb-2 active">
+            💥 Collision: ON
+        </button>
+        
+        <button id="toggle-hand-push" class="toggle-btn w-full bg-cyan-600 hover:bg-cyan-700 px-3 py-2 rounded-lg text-xs font-semibold transition active">
+            🖐️ Dorong: ON
+        </button>
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="ui-overlay bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 flex-wrap justify-center px-4" id="controls" style="display: none;">
+        <button id="add-cube" class="bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg font-semibold transition text-sm">+ Kubus</button>
+        <button id="add-sphere" class="bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg font-semibold transition text-sm">+ Bola</button>
+        <button id="add-cone" class="bg-purple-500 hover:bg-purple-600 px-3 py-2 rounded-lg font-semibold transition text-sm">+ Kerucut</button>
+        <button id="clear-drawing" class="bg-yellow-500 hover:bg-yellow-600 px-3 py-2 rounded-lg font-semibold transition text-sm">🗑️ Hapus Gambar</button>
+        <button id="switch-camera" class="bg-gray-600 hover:bg-gray-700 px-3 py-2 rounded-lg font-semibold transition text-sm">📷 Kamera</button>
+        <button id="reset-all" class="bg-red-500 hover:bg-red-600 px-3 py-2 rounded-lg font-semibold transition text-sm">Reset Semua</button>
+    </div>
+
+    <!-- Gesture Guide -->
+    <div class="gesture-guide" id="gesture-guide" style="display: none;">
+        <div class="gesture-item">
+            <span class="gesture-icon">☝️</span>
+            <span>Tunjuk = Gambar</span>
+        </div>
+        <div class="gesture-item">
+            <span class="gesture-icon">✋</span>
+            <span>Buka = Selesai</span>
+        </div>
+        <div class="gesture-item">
+            <span class="gesture-icon">🤏</span>
+            <span>Cubit = Ambil</span>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+
+        // Global variables
+        let handLandmarker;
+        let webcam, handCanvas, handCtx, drawCanvas, drawCtx, previewCanvas, previewCtx;
+        let scene, camera, renderer;
+        let physicsObjects = [];
+        let handPositions = { left: null, right: null };
+        let handLandmarks3D = { left: null, right: null };
+        let handStates = { 
+            left: { 
+                grabbing: false, 
+                pointing: false,
+                wasPointing: false,
+                pinchHistory: []
+            }, 
+            right: { 
+                grabbing: false, 
+                pointing: false,
+                wasPointing: false,
+                pinchHistory: []
+            } 
+        };
+        let grabbedObjects = { left: null, right: null };
+        let lastHandPositions = { left: null, right: null };
+        let velocityHistory = { left: [], right: [] };
+        let isRunning = false;
+        
+        // Drawing state
+        let currentDrawing = { left: [], right: [] };
+        let isDrawing = { left: false, right: false };
+        let drawColor = '#ff6b6b';
+        let extrudeDepth = 0.5;
+        let lastDrawTime = { left: 0, right: 0 };
+        
+        // Mode toggles
+        let handPushEnabled = true;
+        let objectCollisionEnabled = true;
+        let gravityEnabled = true;
+        
+        // Camera state
+        let currentFacingMode = 'user';
+        let isMobile = false;
+        let isMirrored = true;
+
+        // Physics constants
+        const GRAVITY = -0.012;
+        const FLOOR_Y = -3;
+        const FRICTION = 0.98;
+        const BOUNCE = 0.6;
+        const OBJECT_COLLISION_RESPONSE = 0.8;
+        const HAND_PUSH_FORCE = 0.15;
+        const HAND_LINE_RADIUS = 0.3;
+        
+        // Grab constants
+        const PINCH_THRESHOLD_GRAB = 0.08;
+        const PINCH_THRESHOLD_RELEASE = 0.13;
+        const GRAB_DISTANCE = 1.5;
+        const PINCH_HISTORY_SIZE = 5;
+        const VELOCITY_HISTORY_SIZE = 8;
+        
+        // Drawing constants
+        const MIN_DRAW_POINTS = 15;
+        const POINT_DISTANCE_THRESHOLD = 8;
+        const DRAW_TIMEOUT = 800; // ms to wait before creating object after stopping
+
+        // Hand connections
+        const HAND_CONNECTIONS = [
+            [0, 1], [1, 2], [2, 3], [3, 4],
+            [0, 5], [5, 6], [6, 7], [7, 8],
+            [5, 9], [9, 10], [10, 11], [11, 12],
+            [9, 13], [13, 14], [14, 15], [15, 16],
+            [13, 17], [17, 18], [18, 19], [19, 20],
+            [0, 17]
+        ];
+
+        // Initialize MediaPipe
+        async function initHandLandmarker() {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+            );
+            
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numHands: 2
+            });
+            
+            console.log("Hand Landmarker initialized!");
+        }
+
+        // Initialize Three.js
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            const pointLight1 = new THREE.PointLight(0x00ff88, 0.5, 100);
+            pointLight1.position.set(-3, 2, 3);
+            scene.add(pointLight1);
+            
+            const pointLight2 = new THREE.PointLight(0xff6b6b, 0.5, 100);
+            pointLight2.position.set(3, 2, 3);
+            scene.add(pointLight2);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createMaterial(color) {
+            return new THREE.MeshPhongMaterial({
+                color: color,
+                shininess: 100,
+                specular: 0x444444,
+                transparent: true,
+                opacity: 0.9
+            });
+        }
+
+        function addObject(type, x = 0, y = 2, z = 0) {
+            let geometry, material, mesh;
+            const colors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x95e1d3, 0xf38181, 0xaa96da, 0xfcbad3];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            let radius;
+
+            switch(type) {
+                case 'cube':
+                    geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                    radius = 0.5;
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(0.5, 32, 32);
+                    radius = 0.5;
+                    break;
+                case 'cone':
+                    geometry = new THREE.ConeGeometry(0.5, 1, 32);
+                    radius = 0.5;
+                    break;
+                default:
+                    geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                    radius = 0.5;
+            }
+
+            material = createMaterial(color);
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x + (Math.random() - 0.5) * 0.5, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            mesh.userData = {
+                velocity: { x: 0, y: 0, z: 0 },
+                angularVelocity: { x: 0, y: 0, z: 0 },
+                isGrabbed: false,
+                type: type,
+                radius: radius,
+                mass: 1,
+                originalColor: color,
+                isHighlighted: false,
+                lastCollisionTime: 0,
+                isCustomShape: false
+            };
+
+            scene.add(mesh);
+            physicsObjects.push(mesh);
+            updateObjectCount();
+            
+            createSpawnParticles(mesh.position, color);
+        }
+
+        // Create 3D object from drawing
+        function createObjectFromDrawing(points, color) {
+            if (points.length < MIN_DRAW_POINTS) {
+                console.log("Not enough points:", points.length);
+                return;
+            }
+
+            // Simplify and smooth the path
+            const simplified = simplifyPath(points, 8);
+            if (simplified.length < 4) return;
+
+            // Close the path
+            const first = simplified[0];
+            const last = simplified[simplified.length - 1];
+            const dist = Math.hypot(last.x - first.x, last.y - first.y);
+            if (dist > 30) {
+                simplified.push({ ...first });
+            }
+
+            // Convert screen coordinates to 3D coordinates
+            const shape = new THREE.Shape();
+            const scale = 0.006;
+
+            // Calculate bounds
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            simplified.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+
+            const drawCenterX = (minX + maxX) / 2;
+            const drawCenterY = (minY + maxY) / 2;
+
+            // Create shape centered at origin
+            const firstPoint = simplified[0];
+            shape.moveTo(
+                (firstPoint.x - drawCenterX) * scale,
+                -(firstPoint.y - drawCenterY) * scale
+            );
+
+            for (let i = 1; i < simplified.length; i++) {
+                const p = simplified[i];
+                shape.lineTo(
+                    (p.x - drawCenterX) * scale,
+                    -(p.y - drawCenterY) * scale
+                );
+            }
+
+            // Extrude settings
+            const extrudeSettings = {
+                steps: 2,
+                depth: extrudeDepth,
+                bevelEnabled: true,
+                bevelThickness: 0.05,
+                bevelSize: 0.05,
+                bevelOffset: 0,
+                bevelSegments: 3
+            };
+
+            try {
+                const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                geometry.center();
+                
+                const material = new THREE.MeshPhongMaterial({
+                    color: new THREE.Color(color),
+                    shininess: 80,
+                    specular: 0x333333,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
+                });
+
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // Position at center of where it was drawn
+                const worldX = ((drawCenterX / window.innerWidth) * 2 - 1) * 5;
+                const worldY = (-(drawCenterY / window.innerHeight) * 2 + 1) * 3.5;
+                
+                if (isMirrored) {
+                    mesh.position.set(-worldX, worldY, 0);
+                } else {
+                    mesh.position.set(worldX, worldY, 0);
+                }
+                
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+
+                // Calculate bounding sphere for physics
+                geometry.computeBoundingSphere();
+                const radius = geometry.boundingSphere.radius;
+
+                mesh.userData = {
+                    velocity: { x: 0, y: 0, z: 0 },
+                    angularVelocity: { 
+                        x: (Math.random() - 0.5) * 0.05, 
+                        y: (Math.random() - 0.5) * 0.05, 
+                        z: (Math.random() - 0.5) * 0.05 
+                    },
+                    isGrabbed: false,
+                    type: 'custom',
+                    radius: Math.max(radius, 0.3),
+                    mass: radius * 2,
+                    originalColor: color,
+                    isHighlighted: false,
+                    lastCollisionTime: 0,
+                    isCustomShape: true
+                };
+
+                scene.add(mesh);
+                physicsObjects.push(mesh);
+                updateObjectCount();
+                
+                createSpawnParticles(mesh.position, new THREE.Color(color).getHex());
+                
+                showModeIndicator("✨ Objek Dibuat!", "#00ff88");
+                
+            } catch (error) {
+                console.error("Error creating shape:", error);
+            }
+        }
+
+        // Simplify path using Ramer-Douglas-Peucker algorithm
+        function simplifyPath(points, tolerance) {
+            if (points.length < 3) return points;
+
+            const sqTolerance = tolerance * tolerance;
+            
+            function getSqSegDist(p, p1, p2) {
+                let x = p1.x, y = p1.y;
+                let dx = p2.x - x, dy = p2.y - y;
+
+                if (dx !== 0 || dy !== 0) {
+                    const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+                    if (t > 1) {
+                        x = p2.x;
+                        y = p2.y;
+                    } else if (t > 0) {
+                        x += dx * t;
+                        y += dy * t;
+                    }
+                }
+
+                dx = p.x - x;
+                dy = p.y - y;
+                return dx * dx + dy * dy;
+            }
+
+            function simplifyDPStep(points, first, last, sqTolerance, simplified) {
+                let maxSqDist = sqTolerance;
+                let index = 0;
+
+                for (let i = first + 1; i < last; i++) {
+                    const sqDist = getSqSegDist(points[i], points[first], points[last]);
+                    if (sqDist > maxSqDist) {
+                        index = i;
+                        maxSqDist = sqDist;
+                    }
+                }
+
+                if (maxSqDist > sqTolerance) {
+                    if (index - first > 1) simplifyDPStep(points, first, index, sqTolerance, simplified);
+                    simplified.push(points[index]);
+                    if (last - index > 1) simplifyDPStep(points, index, last, sqTolerance, simplified);
+                }
+            }
+
+            const last = points.length - 1;
+            const simplified = [points[0]];
+            simplifyDPStep(points, 0, last, sqTolerance, simplified);
+            simplified.push(points[last]);
+
+            return simplified;
+        }
+
+        function createSpawnParticles(position, color) {
+            for (let i = 0; i < 15; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.width = (5 + Math.random() * 10) + 'px';
+                particle.style.height = particle.style.width;
+                particle.style.background = '#' + color.toString(16).padStart(6, '0');
+                particle.style.boxShadow = `0 0 10px #${color.toString(16).padStart(6, '0')}`;
+                
+                const screenX = ((position.x / 5) * 0.5 + 0.5) * window.innerWidth;
+                const screenY = ((-position.y / 3.5) * 0.5 + 0.5) * window.innerHeight;
+                
+                particle.style.left = (screenX + (Math.random() - 0.5) * 100) + 'px';
+                particle.style.top = (screenY + (Math.random() - 0.5) * 100) + 'px';
+                
+                document.body.appendChild(particle);
+                setTimeout(() => particle.remove(), 1000);
+            }
+        }
+
+        function createTrailPoint(x, y, color) {
+            const trail = document.createElement('div');
+            trail.className = 'trail-point';
+            trail.style.width = '12px';
+            trail.style.height = '12px';
+            trail.style.background = color;
+            trail.style.boxShadow = `0 0 15px ${color}`;
+            trail.style.left = x + 'px';
+            trail.style.top = y + 'px';
+            document.body.appendChild(trail);
+            setTimeout(() => trail.remove(), 500);
+        }
+
+        function showModeIndicator(text, color) {
+            const indicator = document.getElementById('mode-indicator');
+            indicator.textContent = text;
+            indicator.style.color = color;
+            indicator.classList.add('show');
+            setTimeout(() => indicator.classList.remove('show'), 1500);
+        }
+
+        function updateObjectCount() {
+            const el = document.getElementById('object-count');
+            if (el) el.textContent = `Objek: ${physicsObjects.length}`;
+        }
+
+        function pointToLineDistance(point, lineStart, lineEnd) {
+            const line = { 
+                x: lineEnd.x - lineStart.x, 
+                y: lineEnd.y - lineStart.y 
+            };
+            const len = Math.sqrt(line.x * line.x + line.y * line.y);
+            
+            if (len === 0) {
+                return {
+                    distance: Math.hypot(point.x - lineStart.x, point.y - lineStart.y),
+                    closest: { x: lineStart.x, y: lineStart.y },
+                    t: 0
+                };
+            }
+            
+            const t = Math.max(0, Math.min(1, 
+                ((point.x - lineStart.x) * line.x + (point.y - lineStart.y) * line.y) / (len * len)
+            ));
+            
+            const closest = {
+                x: lineStart.x + t * line.x,
+                y: lineStart.y + t * line.y
+            };
+            
+            return {
+                distance: Math.hypot(point.x - closest.x, point.y - closest.y),
+                closest: closest,
+                t: t
+            };
+        }
+
+        function checkHandCollision(obj, landmarks3D) {
+            if (!landmarks3D || obj.userData.isGrabbed) return null;
+            
+            let minDist = Infinity;
+            let closestPoint = null;
+            
+            const objPos = { x: obj.position.x, y: obj.position.y };
+            const objRadius = obj.userData.radius;
+            
+            for (const [i, j] of HAND_CONNECTIONS) {
+                const start = landmarks3D[i];
+                const end = landmarks3D[j];
+                
+                if (!start || !end) continue;
+                
+                const result = pointToLineDistance(objPos, start, end);
+                
+                if (result.distance < minDist) {
+                    minDist = result.distance;
+                    closestPoint = result.closest;
+                }
+            }
+            
+            const collisionThreshold = objRadius + HAND_LINE_RADIUS;
+            
+            if (minDist < collisionThreshold && closestPoint) {
+                const dx = objPos.x - closestPoint.x;
+                const dy = objPos.y - closestPoint.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+                
+                return {
+                    distance: minDist,
+                    normal: { x: dx / dist, y: dy / dist },
+                    penetration: collisionThreshold - minDist
+                };
+            }
+            
+            return null;
+        }
+
+        function handleObjectCollisions() {
+            if (!objectCollisionEnabled) return;
+            
+            const currentTime = Date.now();
+            
+            for (let i = 0; i < physicsObjects.length; i++) {
+                for (let j = i + 1; j < physicsObjects.length; j++) {
+                    const objA = physicsObjects[i];
+                    const objB = physicsObjects[j];
+                    
+                    if (objA.userData.isGrabbed && objB.userData.isGrabbed) continue;
+                    
+                    const dx = objB.position.x - objA.position.x;
+                    const dy = objB.position.y - objA.position.y;
+                    const dz = objB.position.z - objA.position.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    
+                    const minDist = objA.userData.radius + objB.userData.radius;
+                    
+                    if (dist < minDist && dist > 0) {
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const nz = dz / dist;
+                        
+                        const overlap = minDist - dist;
+                        
+                        if (!objA.userData.isGrabbed && !objB.userData.isGrabbed) {
+                            objA.position.x -= nx * overlap * 0.5;
+                            objA.position.y -= ny * overlap * 0.5;
+                            objA.position.z -= nz * overlap * 0.5;
+                            objB.position.x += nx * overlap * 0.5;
+                            objB.position.y += ny * overlap * 0.5;
+                            objB.position.z += nz * overlap * 0.5;
+                        } else if (objA.userData.isGrabbed) {
+                            objB.position.x += nx * overlap;
+                            objB.position.y += ny * overlap;
+                            objB.position.z += nz * overlap;
+                        } else {
+                            objA.position.x -= nx * overlap;
+                            objA.position.y -= ny * overlap;
+                            objA.position.z -= nz * overlap;
+                        }
+                        
+                        const relVelX = objB.userData.velocity.x - objA.userData.velocity.x;
+                        const relVelY = objB.userData.velocity.y - objA.userData.velocity.y;
+                        const relVelZ = objB.userData.velocity.z - objA.userData.velocity.z;
+                        
+                        const velAlongNormal = relVelX * nx + relVelY * ny + relVelZ * nz;
+                        
+                        if (velAlongNormal > 0) continue;
+                        
+                        const restitution = OBJECT_COLLISION_RESPONSE;
+                        const impulse = -(1 + restitution) * velAlongNormal / 2;
+                        
+                        if (!objA.userData.isGrabbed) {
+                            objA.userData.velocity.x -= impulse * nx;
+                            objA.userData.velocity.y -= impulse * ny;
+                            objA.userData.velocity.z -= impulse * nz;
+                        }
+                        
+                        if (!objB.userData.isGrabbed) {
+                            objB.userData.velocity.x += impulse * nx;
+                            objB.userData.velocity.y += impulse * ny;
+                            objB.userData.velocity.z += impulse * nz;
+                        }
+                        
+                        // Flash effect
+                        if (currentTime - objA.userData.lastCollisionTime > 100) {
+                            objA.material.emissive = new THREE.Color(0x333333);
+                            setTimeout(() => {
+                                if (!objA.userData.isGrabbed && !objA.userData.isHighlighted) {
+                                    objA.material.emissive = new THREE.Color(0x000000);
+                                }
+                            }, 100);
+                            objA.userData.lastCollisionTime = currentTime;
+                        }
+                        
+                        if (currentTime - objB.userData.lastCollisionTime > 100) {
+                            objB.material.emissive = new THREE.Color(0x333333);
+                            setTimeout(() => {
+                                if (!objB.userData.isGrabbed && !objB.userData.isHighlighted) {
+                                    objB.material.emissive = new THREE.Color(0x000000);
+                                }
+                            }, 100);
+                            objB.userData.lastCollisionTime = currentTime;
+                        }
+                    }
+                }
+            }
+        }
+
+        function handleHandPush(landmarks3D, handedness) {
+            if (!handPushEnabled || !landmarks3D) return;
+            
+            physicsObjects.forEach(obj => {
+                if (obj.userData.isGrabbed) return;
+                
+                const collision = checkHandCollision(obj, landmarks3D);
+                
+                if (collision) {
+                    const force = HAND_PUSH_FORCE * (1 + collision.penetration);
+                    obj.userData.velocity.x += collision.normal.x * force;
+                    obj.userData.velocity.y += collision.normal.y * force;
+                    
+                    obj.material.emissive = new THREE.Color(0x00ffff);
+                    setTimeout(() => {
+                        if (!obj.userData.isGrabbed && !obj.userData.isHighlighted) {
+                            obj.material.emissive = new THREE.Color(0x000000);
+                        }
+                    }, 100);
+                }
+            });
+        }
+
+        function updatePhysics() {
+            handleObjectCollisions();
+            
+            physicsObjects.forEach(obj => {
+                if (obj.userData.isGrabbed) return;
+
+                // Apply gravity
+                if (gravityEnabled) {
+                    obj.userData.velocity.y += GRAVITY;
+                }
+                
+                // Apply velocity
+                obj.position.x += obj.userData.velocity.x;
+                obj.position.y += obj.userData.velocity.y;
+                obj.position.z += obj.userData.velocity.z;
+                
+                // Apply friction
+                obj.userData.velocity.x *= FRICTION;
+                obj.userData.velocity.z *= FRICTION;
+
+                // Floor collision
+                if (obj.position.y < FLOOR_Y + obj.userData.radius) {
+                    obj.position.y = FLOOR_Y + obj.userData.radius;
+                    obj.userData.velocity.y *= -BOUNCE;
+                    obj.userData.velocity.x *= 0.9;
+                    obj.userData.velocity.z *= 0.9;
+                    
+                    if (Math.abs(obj.userData.velocity.y) < 0.02) {
+                        obj.userData.velocity.y = 0;
+                    }
+                }
+
+                // Wall collision
+                const wallLimit = 5;
+                if (Math.abs(obj.position.x) > wallLimit) {
+                    obj.position.x = Math.sign(obj.position.x) * wallLimit;
+                    obj.userData.velocity.x *= -BOUNCE;
+                }
+                
+                // Ceiling
+                if (obj.position.y > 4) {
+                    obj.position.y = 4;
+                    obj.userData.velocity.y *= -0.5;
+                }
+
+                // Rotation
+                if (obj.userData.angularVelocity) {
+                    obj.rotation.x += obj.userData.angularVelocity.x + obj.userData.velocity.y * 0.2;
+                    obj.rotation.y += obj.userData.angularVelocity.y + obj.userData.velocity.x * 0.2;
+                    obj.rotation.z += obj.userData.angularVelocity.z;
+                } else {
+                    obj.rotation.x += obj.userData.velocity.y * 0.3;
+                    obj.rotation.y += obj.userData.velocity.x * 0.3;
+                }
+            });
+        }
+
+        function getSmoothedPinch(hand, currentPinch) {
+            handStates[hand].pinchHistory.push(currentPinch);
+            if (handStates[hand].pinchHistory.length > PINCH_HISTORY_SIZE) {
+                handStates[hand].pinchHistory.shift();
+            }
+            
+            const sum = handStates[hand].pinchHistory.reduce((a, b) => a + b, 0);
+            return sum / handStates[hand].pinchHistory.length;
+        }
+
+        function getSmoothedVelocity(hand) {
+            const history = velocityHistory[hand];
+            if (history.length === 0) return { x: 0, y: 0 };
+            
+            let sumX = 0, sumY = 0;
+            history.forEach(v => {
+                sumX += v.x;
+                sumY += v.y;
+            });
+            
+            return {
+                x: sumX / history.length,
+                y: sumY / history.length
+            };
+        }
+
+        function findNearestObject(position, excludeGrabbed = true) {
+            let nearest = null;
+            let minDist = Infinity;
+            
+            physicsObjects.forEach(obj => {
+                if (excludeGrabbed && obj.userData.isGrabbed) return;
+                
+                const dist = Math.hypot(
+                    obj.position.x - position.x,
+                    obj.position.y - position.y
+                );
+                
+                if (dist < minDist && dist < GRAB_DISTANCE) {
+                    minDist = dist;
+                    nearest = obj;
+                }
+            });
+            
+            return { object: nearest, distance: minDist };
+        }
+
+        function landmarkTo3D(landmark) {
+            if (isMirrored) {
+                return {
+                    x: ((1 - landmark.x) * 2 - 1) * 5,
+                    y: (-(landmark.y) * 2 + 1) * 3.5
+                };
+            } else {
+                return {
+                    x: (landmark.x * 2 - 1) * 5,
+                    y: (-(landmark.y) * 2 + 1) * 3.5
+                };
+            }
+        }
+
+        // Check if pointing (index finger up, others down)
+        function isPointing(landmarks) {
+            const indexTip = landmarks[8];
+            const indexPip = landmarks[6];
+            const indexMcp = landmarks[5];
+            
+            const middleTip = landmarks[12];
+            const middlePip = landmarks[10];
+            
+            const ringTip = landmarks[16];
+            const ringPip = landmarks[14];
+            
+            const pinkyTip = landmarks[20];
+            const pinkyPip = landmarks[18];
+            
+            // Index should be extended (tip above PIP in screen coords = lower y value)
+            const indexExtended = indexTip.y < indexPip.y - 0.02;
+            
+            // Other fingers should be curled (tip below PIP or close to it)
+            const middleCurled = middleTip.y > middlePip.y - 0.02;
+            const ringCurled = ringTip.y > ringPip.y - 0.02;
+            const pinkyCurled = pinkyTip.y > pinkyPip.y - 0.02;
+            
+            return indexExtended && middleCurled && ringCurled && pinkyCurled;
+        }
+
+        // Check if hand is open (all fingers extended)
+        function isHandOpen(landmarks) {
+            const fingers = [
+                { tip: 8, pip: 6 },   // index
+                { tip: 12, pip: 10 }, // middle
+                { tip: 16, pip: 14 }, // ring
+                { tip: 20, pip: 18 }  // pinky
+            ];
+            
+            let extendedCount = 0;
+            for (const finger of fingers) {
+                const tip = landmarks[finger.tip];
+                const pip = landmarks[finger.pip];
+                if (tip.y < pip.y - 0.02) {
+                    extendedCount++;
+                }
+            }
+            
+            return extendedCount >= 3;
+        }
+
+        function detectHands(video, timestamp) {
+            if (!handLandmarker || !isRunning) return;
+
+            const results = handLandmarker.detectForVideo(video, timestamp);
+            
+            handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+            physicsObjects.forEach(obj => {
+                if (!obj.userData.isGrabbed && obj.userData.isHighlighted) {
+                    obj.material.emissive = new THREE.Color(0x000000);
+                    obj.userData.isHighlighted = false;
+                }
+            });
+
+            let detectedHands = { left: false, right: false };
+            
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+
+            if (results.landmarks && results.landmarks.length > 0) {
+                statusDot.className = 'w-3 h-3 rounded-full bg-green-400';
+                statusText.textContent = 'Tangan terdeteksi!';
+                document.getElementById('hand-count').textContent = `Tangan: ${results.landmarks.length}`;
+
+                results.landmarks.forEach((landmarks, index) => {
+                    const handedness = results.handednesses[index][0].categoryName.toLowerCase();
+                    detectedHands[handedness] = true;
+                    
+                    const landmarks3D = landmarks.map(lm => landmarkTo3D(lm));
+                    handLandmarks3D[handedness] = landmarks3D;
+                    
+                    // Check gestures
+                    const pointing = isPointing(landmarks);
+                    const handOpen = isHandOpen(landmarks);
+                    
+                    handStates[handedness].pointing = pointing;
+                    
+                    handleHandPush(landmarks3D, handedness);
+                    drawHandLandmarks(landmarks, handedness, pointing);
+                    processHandInteraction(landmarks, handedness, pointing, handOpen);
+                });
+            } else {
+                statusDot.className = 'w-3 h-3 rounded-full bg-yellow-400';
+                statusText.textContent = 'Mendeteksi tangan...';
+                document.getElementById('hand-count').textContent = 'Tangan: 0';
+            }
+            
+            // Handle hands that are no longer detected
+            ['left', 'right'].forEach(hand => {
+                if (!detectedHands[hand]) {
+                    document.getElementById(`hand-${hand}`).style.display = 'none';
+                    
+                    if (grabbedObjects[hand]) {
+                        releaseObject(hand);
+                    }
+                    
+                    // Finish drawing if hand disappears
+                    if (currentDrawing[hand].length >= MIN_DRAW_POINTS) {
+                        createObjectFromDrawing(currentDrawing[hand], drawColor);
+                    }
+                    currentDrawing[hand] = [];
+                    isDrawing[hand] = false;
+                    
+                    handStates[hand].pinchHistory = [];
+                    handStates[hand].grabbing = false;
+                    handStates[hand].pointing = false;
+                    lastHandPositions[hand] = null;
+                    velocityHistory[hand] = [];
+                    handLandmarks3D[hand] = null;
+                }
+            });
+            
+            // Update mode status
+            const modeStatus = document.getElementById('mode-status');
+            if (handStates.left.pointing || handStates.right.pointing) {
+                modeStatus.textContent = 'Mode: ✏️ Menggambar';
+                modeStatus.className = 'text-green-400 mt-1 font-semibold';
+            } else if (grabbedObjects.left || grabbedObjects.right) {
+                modeStatus.textContent = 'Mode: 🤏 Menggenggam';
+                modeStatus.className = 'text-red-400 mt-1 font-semibold';
+            } else {
+                modeStatus.textContent = 'Mode: ✋ Normal';
+                modeStatus.className = 'text-blue-400 mt-1 font-semibold';
+            }
+            
+            // Update draw points count
+            const totalPoints = currentDrawing.left.length + currentDrawing.right.length;
+            document.getElementById('draw-points').textContent = `Points: ${totalPoints}`;
+            
+            // Draw current drawing path
+            drawCurrentPath();
+        }
+
+        function processHandInteraction(landmarks, handedness, pointing, handOpen) {
+            const indexTip = landmarks[8];
+            const thumbTip = landmarks[4];
+            const indexMcp = landmarks[5];
+            
+            // Get position based on mode
+            let screenX, screenY, vector;
+            
+            if (pointing) {
+                // Use index fingertip for drawing
+                if (isMirrored) {
+                    screenX = (1 - indexTip.x) * window.innerWidth;
+                    vector = new THREE.Vector3(
+                        ((1 - indexTip.x) * 2 - 1) * 5,
+                        (-(indexTip.y) * 2 + 1) * 3.5,
+                        0
+                    );
+                } else {
+                    screenX = indexTip.x * window.innerWidth;
+                    vector = new THREE.Vector3(
+                        (indexTip.x * 2 - 1) * 5,
+                        (-(indexTip.y) * 2 + 1) * 3.5,
+                        0
+                    );
+                }
+                screenY = indexTip.y * window.innerHeight;
+            } else {
+                // Use pinch center for grabbing
+                const pinchCenter = {
+                    x: (thumbTip.x + indexTip.x) / 2,
+                    y: (thumbTip.y + indexTip.y) / 2
+                };
+                
+                if (isMirrored) {
+                    screenX = (1 - pinchCenter.x) * window.innerWidth;
+                    vector = new THREE.Vector3(
+                        ((1 - pinchCenter.x) * 2 - 1) * 5,
+                        (-(pinchCenter.y) * 2 + 1) * 3.5,
+                        0
+                    );
+                } else {
+                    screenX = pinchCenter.x * window.innerWidth;
+                    vector = new THREE.Vector3(
+                        (pinchCenter.x * 2 - 1) * 5,
+                        (-(pinchCenter.y) * 2 + 1) * 3.5,
+                        0
+                    );
+                }
+                screenY = pinchCenter.y * window.innerHeight;
+            }
+
+            handPositions[handedness] = { x: screenX, y: screenY, vector };
+
+            // Calculate pinch for grabbing
+            const handSize = Math.hypot(
+                landmarks[0].x - indexMcp.x,
+                landmarks[0].y - indexMcp.y
+            );
+            
+            const rawPinchDist = Math.hypot(
+                thumbTip.x - indexTip.x,
+                thumbTip.y - indexTip.y
+            );
+            
+            const normalizedPinch = rawPinchDist / (handSize * 2);
+            const smoothedPinch = getSmoothedPinch(handedness, normalizedPinch);
+
+            const wasGrabbing = handStates[handedness].grabbing;
+            let isPinching;
+            
+            if (wasGrabbing) {
+                isPinching = smoothedPinch < PINCH_THRESHOLD_RELEASE;
+            } else {
+                isPinching = smoothedPinch < PINCH_THRESHOLD_GRAB;
+            }
+            
+            handStates[handedness].grabbing = isPinching && !pointing;
+
+            // Update indicator
+            const indicator = document.getElementById(`hand-${handedness}`);
+            
+            if (indicator) {
+                indicator.style.display = 'block';
+                indicator.style.left = screenX + 'px';
+                indicator.style.top = screenY + 'px';
+                
+                if (pointing) {
+                    indicator.className = 'hand-indicator drawing';
+                } else if (grabbedObjects[handedness]) {
+                    indicator.className = 'hand-indicator grabbing';
+                } else {
+                    const nearest = findNearestObject(vector);
+                    if (nearest.object) {
+                        indicator.className = 'hand-indicator near-object';
+                        nearest.object.material.emissive = new THREE.Color(0x222222);
+                        nearest.object.userData.isHighlighted = true;
+                    } else {
+                        indicator.className = 'hand-indicator';
+                    }
+                }
+            }
+
+            // Calculate velocity
+            if (lastHandPositions[handedness]) {
+                const vel = {
+                    x: (vector.x - lastHandPositions[handedness].x),
+                    y: (vector.y - lastHandPositions[handedness].y)
+                };
+                
+                velocityHistory[handedness].push(vel);
+                if (velocityHistory[handedness].length > VELOCITY_HISTORY_SIZE) {
+                    velocityHistory[handedness].shift();
+                }
+            }
+            lastHandPositions[handedness] = { x: vector.x, y: vector.y };
+
+            // Handle interaction based on gesture
+            if (pointing) {
+                // Drawing mode - draw with index finger
+                handleDrawing(handedness, screenX, screenY);
+                
+                // Release any grabbed object
+                if (grabbedObjects[handedness]) {
+                    releaseObject(handedness);
+                }
+            } else {
+                // Check if we should finish drawing
+                if (handStates[handedness].wasPointing && !pointing) {
+                    // Was pointing, now stopped - finish drawing
+                    if (currentDrawing[handedness].length >= MIN_DRAW_POINTS) {
+                        createObjectFromDrawing(currentDrawing[handedness], drawColor);
+                    }
+                    currentDrawing[handedness] = [];
+                    isDrawing[handedness] = false;
+                }
+                
+                // Handle grabbing when not pointing
+                if (!pointing) {
+                    handleGrabbing(handedness, vector, isPinching && !pointing);
+                }
+            }
+            
+            handStates[handedness].wasPointing = pointing;
+        }
+
+        function handleDrawing(hand, x, y) {
+            const now = Date.now();
+            
+            if (!isDrawing[hand]) {
+                isDrawing[hand] = true;
+                currentDrawing[hand] = [];
+                if (!handStates[hand].wasPointing) {
+                    showModeIndicator("");
+                }
+            }
+            
+            // Add point if far enough from last point
+            const lastPoint = currentDrawing[hand][currentDrawing[hand].length - 1];
+            if (!lastPoint || Math.hypot(x - lastPoint.x, y - lastPoint.y) > POINT_DISTANCE_THRESHOLD) {
+                currentDrawing[hand].push({ x, y });
+                lastDrawTime[hand] = now;
+                
+                // Create trail effect
+                createTrailPoint(x, y, drawColor);
+            }
+        }
+
+        function drawCurrentPath() {
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            ['left', 'right'].forEach(hand => {
+                const points = currentDrawing[hand];
+                if (points.length < 2) return;
+                
+                drawCtx.save();
+                
+                // Draw glow
+                drawCtx.strokeStyle = drawColor;
+                drawCtx.lineWidth = 12;
+                drawCtx.lineCap = 'round';
+                drawCtx.lineJoin = 'round';
+                drawCtx.shadowColor = drawColor;
+                drawCtx.shadowBlur = 30;
+                drawCtx.globalAlpha = 0.4;
+                
+                drawCtx.beginPath();
+                drawCtx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    drawCtx.lineTo(points[i].x, points[i].y);
+                }
+                drawCtx.stroke();
+                
+                // Draw main line
+                drawCtx.shadowBlur = 15;
+                drawCtx.globalAlpha = 0.8;
+                drawCtx.lineWidth = 6;
+                
+                drawCtx.beginPath();
+                drawCtx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    drawCtx.lineTo(points[i].x, points[i].y);
+                }
+                drawCtx.stroke();
+                
+                // Draw inner bright line
+                drawCtx.shadowBlur = 0;
+                drawCtx.globalAlpha = 1;
+                drawCtx.lineWidth = 3;
+                drawCtx.strokeStyle = 'white';
+                
+                drawCtx.beginPath();
+                drawCtx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    drawCtx.lineTo(points[i].x, points[i].y);
+                }
+                drawCtx.stroke();
+                
+                // Draw points
+                points.forEach((p, i) => {
+                    if (i % 5 === 0) {
+                        drawCtx.beginPath();
+                        drawCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                        drawCtx.fillStyle = drawColor;
+                        drawCtx.fill();
+                        drawCtx.beginPath();
+                        drawCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                        drawCtx.fillStyle = 'white';
+                        drawCtx.fill();
+                    }
+                });
+                
+                // Draw end point (current fingertip position)
+                const lastP = points[points.length - 1];
+                drawCtx.beginPath();
+                drawCtx.arc(lastP.x, lastP.y, 8, 0, Math.PI * 2);
+                drawCtx.fillStyle = drawColor;
+                drawCtx.shadowColor = drawColor;
+                drawCtx.shadowBlur = 20;
+                drawCtx.fill();
+                
+                drawCtx.restore();
+            });
+            
+            // Update preview
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const points = [...currentDrawing.left, ...currentDrawing.right];
+            
+            if (points.length < 3) {
+                previewCanvas.style.display = 'none';
+                return;
+            }
+            
+            previewCanvas.style.display = 'block';
+            
+            previewCtx.fillStyle = 'rgba(0,0,0,0.9)';
+            previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+            
+            // Find bounds
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+            
+            const width = maxX - minX || 1;
+            const height = maxY - minY || 1;
+            const scale = Math.min(120 / width, 120 / height);
+            const offsetX = (150 - width * scale) / 2;
+            const offsetY = (150 - height * scale) / 2;
+            
+            // Draw filled shape preview
+            previewCtx.fillStyle = drawColor + '60';
+            previewCtx.beginPath();
+            const firstP = points[0];
+            previewCtx.moveTo((firstP.x - minX) * scale + offsetX, (firstP.y - minY) * scale + offsetY);
+            
+            for (let i = 1; i < points.length; i++) {
+                const p = points[i];
+                previewCtx.lineTo((p.x - minX) * scale + offsetX, (p.y - minY) * scale + offsetY);
+            }
+            previewCtx.closePath();
+            previewCtx.fill();
+            
+            // Draw outline
+            previewCtx.strokeStyle = drawColor;
+            previewCtx.lineWidth = 2;
+            previewCtx.lineCap = 'round';
+            previewCtx.lineJoin = 'round';
+            previewCtx.stroke();
+            
+            // Draw label
+            previewCtx.fillStyle = 'white';
+            previewCtx.font = '10px sans-serif';
+            previewCtx.textAlign = 'center';
+            previewCtx.fillText('Preview 3D', 75, 145);
+        }
+
+        function drawHandLandmarks(landmarks, handedness, isPointing) {
+            const baseColor = handedness === 'left' ? '#00ff88' : '#ff6b6b';
+            const color = isPointing ? '#00ff88' : (handPushEnabled ? '#00ffff' : baseColor);
+            
+            handCtx.save();
+            
+            if (isMirrored) {
+                handCtx.scale(-1, 1);
+                handCtx.translate(-handCanvas.width, 0);
+            }
+
+            handCtx.strokeStyle = color;
+            handCtx.lineWidth = handPushEnabled ? 4 : 3;
+            handCtx.lineCap = 'round';
+            
+            if (handPushEnabled) {
+                handCtx.shadowColor = color;
+                handCtx.shadowBlur = 10;
+            }
+            
+            // Draw connections
+            HAND_CONNECTIONS.forEach(([i, j]) => {
+                handCtx.beginPath();
+                handCtx.moveTo(landmarks[i].x * handCanvas.width, landmarks[i].y * handCanvas.height);
+                handCtx.lineTo(landmarks[j].x * handCanvas.width, landmarks[j].y * handCanvas.height);
+                handCtx.stroke();
+            });
+            
+            handCtx.shadowBlur = 0;
+
+            // Draw landmarks
+            landmarks.forEach((lm, i) => {
+                handCtx.beginPath();
+                let radius = 5;
+                
+                // Index tip larger when pointing
+                if (i === 8 && isPointing) {
+                    radius = 12;
+                    handCtx.shadowColor = '#00ff88';
+                    handCtx.shadowBlur = 20;
+                } else if ([4, 8].includes(i)) {
+                    radius = 8;
+                }
+                
+                handCtx.arc(lm.x * handCanvas.width, lm.y * handCanvas.height, radius, 0, Math.PI * 2);
+                
+                if (i === 8 && isPointing) {
+                    handCtx.fillStyle = '#00ff88';
+                } else if ([4, 8].includes(i)) {
+                    handCtx.fillStyle = '#ffffff';
+                } else {
+                    handCtx.fillStyle = baseColor;
+                }
+                handCtx.fill();
+                
+                if ([4, 8].includes(i)) {
+                    handCtx.strokeStyle = baseColor;
+                    handCtx.lineWidth = 2;
+                    handCtx.stroke();
+                }
+                
+                handCtx.shadowBlur = 0;
+            });
+
+            handCtx.restore();
+        }
+
+        function handleGrabbing(hand, position, isGrabbing) {
+            const currentlyGrabbed = grabbedObjects[hand];
+            
+            if (isGrabbing) {
+                if (!currentlyGrabbed) {
+                    const nearest = findNearestObject(position);
+                    
+                    if (nearest.object && nearest.distance < GRAB_DISTANCE) {
+                        const obj = nearest.object;
+                        obj.userData.isGrabbed = true;
+                        obj.material.emissive = new THREE.Color(0x444444);
+                        obj.userData.velocity = { x: 0, y: 0, z: 0 };
+                        grabbedObjects[hand] = obj;
+                    }
+                } else {
+                    const obj = currentlyGrabbed;
+                    
+                    const lerpFactor = 0.4;
+                    obj.position.x += (position.x - obj.position.x) * lerpFactor;
+                    obj.position.y += (position.y - obj.position.y) * lerpFactor;
+                    
+                    obj.position.x = Math.max(-5, Math.min(5, obj.position.x));
+                    obj.position.y = Math.max(FLOOR_Y + 0.5, Math.min(4, obj.position.y));
+                }
+            } else {
+                if (currentlyGrabbed) {
+                    releaseObject(hand);
+                }
+            }
+        }
+
+        function releaseObject(hand) {
+            if (grabbedObjects[hand]) {
+                const obj = grabbedObjects[hand];
+                obj.userData.isGrabbed = false;
+                obj.material.emissive = new THREE.Color(0x000000);
+                
+                const smoothedVel = getSmoothedVelocity(hand);
+                const throwMultiplier = 3;
+                
+                obj.userData.velocity.x = smoothedVel.x * throwMultiplier;
+                obj.userData.velocity.y = smoothedVel.y * throwMultiplier;
+                
+                grabbedObjects[hand] = null;
+                velocityHistory[hand] = [];
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            handCanvas.width = window.innerWidth;
+            handCanvas.height = window.innerHeight;
+            drawCanvas.width = window.innerWidth;
+            drawCanvas.height = window.innerHeight;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (isRunning && webcam.readyState >= 2) {
+                detectHands(webcam, performance.now());
+            }
+
+            updatePhysics();
+            renderer.render(scene, camera);
+        }
+
+        function detectMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                   (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+        }
+
+        function updateMirroring() {
+            if (currentFacingMode === 'user') {
+                webcam.classList.add('mirrored');
+                isMirrored = true;
+            } else {
+                webcam.classList.remove('mirrored');
+                isMirrored = false;
+            }
+        }
+
+        async function getCameraStream(facingMode) {
+            const constraints = {
+                video: { 
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: facingMode
+                }
+            };
+            
+            if (isMobile) {
+                constraints.video.facingMode = { exact: facingMode };
+            }
+            
+            try {
+                return await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (error) {
+                console.log('Falling back to non-exact facingMode');
+                constraints.video.facingMode = facingMode;
+                return await navigator.mediaDevices.getUserMedia(constraints);
+            }
+        }
+
+        async function switchCamera() {
+            if (!webcam) return;
+            
+            const currentStream = webcam.srcObject;
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            
+            try {
+                const stream = await getCameraStream(currentFacingMode);
+                webcam.srcObject = stream;
+                await webcam.play();
+                updateMirroring();
+            } catch (error) {
+                console.error('Error switching camera:', error);
+                currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+                const stream = await getCameraStream(currentFacingMode);
+                webcam.srcObject = stream;
+                await webcam.play();
+            }
+        }
+
+        async function start() {
+            webcam = document.getElementById('webcam');
+            handCanvas = document.getElementById('hand-canvas');
+            handCtx = handCanvas.getContext('2d');
+            drawCanvas = document.getElementById('draw-canvas');
+            drawCtx = drawCanvas.getContext('2d');
+            previewCanvas = document.getElementById('drawing-preview');
+            previewCtx = previewCanvas.getContext('2d');
+            
+            previewCanvas.width = 150;
+            previewCanvas.height = 150;
+
+            handCanvas.width = window.innerWidth;
+            handCanvas.height = window.innerHeight;
+            drawCanvas.width = window.innerWidth;
+            drawCanvas.height = window.innerHeight;
+
+            isMobile = detectMobile();
+            currentFacingMode = isMobile ? 'environment' : 'user';
+
+            try {
+                const stream = await getCameraStream(currentFacingMode);
+                webcam.srcObject = stream;
+                await webcam.play();
+                updateMirroring();
+
+                await initHandLandmarker();
+                initThreeJS();
+                
+                // Add initial objects
+                addObject('cube', -1.5, 2, 0);
+                addObject('sphere', 1.5, 2.5, 0);
+                addObject('cone', 0, 2, 0);
+                
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('info-panel').style.display = 'block';
+                document.getElementById('draw-panel').style.display = 'block';
+                document.getElementById('controls').style.display = 'flex';
+                document.getElementById('gesture-guide').style.display = 'flex';
+                
+                isRunning = true;
+                animate();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                
+                try {
+                    currentFacingMode = 'user';
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+                    });
+                    webcam.srcObject = fallbackStream;
+                    await webcam.play();
+                    updateMirroring();
+                    
+                    await initHandLandmarker();
+                    initThreeJS();
+                    
+                    addObject('cube', -1.5, 2, 0);
+                    addObject('sphere', 1.5, 2.5, 0);
+                    addObject('cone', 0, 2, 0);
+                    
+                    document.getElementById('start-screen').style.display = 'none';
+                    document.getElementById('info-panel').style.display = 'block';
+                    document.getElementById('draw-panel').style.display = 'block';
+                    document.getElementById('controls').style.display = 'flex';
+                    document.getElementById('gesture-guide').style.display = 'flex';
+                    
+                    isRunning = true;
+                    animate();
+                    
+                } catch (fallbackError) {
+                    console.error('Fallback error:', fallbackError);
+                    alert('Gagal mengakses kamera. Pastikan Anda memberikan izin kamera.');
+                }
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('start-btn').addEventListener('click', start);
+        
+        document.getElementById('add-cube').addEventListener('click', () => addObject('cube'));
+        document.getElementById('add-sphere').addEventListener('click', () => addObject('sphere'));
+        document.getElementById('add-cone').addEventListener('click', () => addObject('cone'));
+        document.getElementById('switch-camera').addEventListener('click', switchCamera);
+        
+        document.getElementById('clear-drawing').addEventListener('click', () => {
+            currentDrawing = { left: [], right: [] };
+            isDrawing = { left: false, right: false };
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            previewCanvas.style.display = 'none';
+        });
+        
+        document.getElementById('reset-all').addEventListener('click', () => {
+            physicsObjects.forEach(obj => scene.remove(obj));
+            physicsObjects = [];
+            grabbedObjects = { left: null, right: null };
+            currentDrawing = { left: [], right: [] };
+            isDrawing = { left: false, right: false };
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            previewCanvas.style.display = 'none';
+            
+            addObject('cube', -1.5, 2, 0);
+            addObject('sphere', 1.5, 2.5, 0);
+            addObject('cone', 0, 2, 0);
+        });
+        
+        document.getElementById('toggle-physics').addEventListener('click', function() {
+            gravityEnabled = !gravityEnabled;
+            this.textContent = `🌍 Gravitasi: ${gravityEnabled ? 'ON' : 'OFF'}`;
+            this.classList.toggle('active', gravityEnabled);
+            this.classList.toggle('bg-green-600', gravityEnabled);
+            this.classList.toggle('bg-gray-600', !gravityEnabled);
+        });
+        
+        document.getElementById('toggle-collision').addEventListener('click', function() {
+            objectCollisionEnabled = !objectCollisionEnabled;
+            this.textContent = `💥 Collision: ${objectCollisionEnabled ? 'ON' : 'OFF'}`;
+            this.classList.toggle('active', objectCollisionEnabled);
+            this.classList.toggle('bg-orange-600', objectCollisionEnabled);
+            this.classList.toggle('bg-gray-600', !objectCollisionEnabled);
+        });
+        
+        document.getElementById('toggle-hand-push').addEventListener('click', function() {
+            handPushEnabled = !handPushEnabled;
+            this.textContent = `🖐️ Dorong: ${handPushEnabled ? 'ON' : 'OFF'}`;
+            this.classList.toggle('active', handPushEnabled);
+            this.classList.toggle('bg-cyan-600', handPushEnabled);
+            this.classList.toggle('bg-gray-600', !handPushEnabled);
+        });
+        
+        // Color buttons
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                drawColor = this.dataset.color;
+            });
+        });
+        
+        // Depth slider
+        document.getElementById('depth-slider').addEventListener('input', function() {
+            extrudeDepth = parseFloat(this.value);
+            document.getElementById('depth-value').textContent = extrudeDepth.toFixed(1);
+        });
+    </script>
+</body>
+</html>
+<style></style><script></script><style></style><script></script>
